@@ -57,13 +57,23 @@ class CondaPlugin(PluginV2):
             "properties": {
                 "conda-packages": {
                     "type": "array",
-                    "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string"},
                     "default": [],
                 },
                 "conda-python-version": {"type": "string", "default": ""},
                 "conda-miniconda-version": {"type": "string", "default": "latest"},
+                "conda-package-files": {
+                    "type": "array",
+                    "uniqueItems": True,
+                    "items": {"type": "string"},
+                    "default": [],
+                },
+                "conda-create-params": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                },
             },
         }
 
@@ -97,15 +107,24 @@ class CondaPlugin(PluginV2):
         deploy_cmd = [
             "CONDA_TARGET_PREFIX_OVERRIDE=" + conda_target_prefix,
             "conda",
+            "env",
             "create",
-            "--prefix",
+            "-p",
             "$SNAPCRAFT_PART_INSTALL",
-            "--yes",
+            "--force",
         ]
         if self.options.conda_python_version:
             deploy_cmd.append("python={}".format(self.options.conda_python_version))
 
         deploy_cmd.extend(self.options.conda_packages)
+
+        pkg_files = self.options.conda_package_files
+        pkg_files_params = []
+        for pkg_file in pkg_files:
+            pkg_files_params.extend(["-f", "${SNAPCRAFT_PROJECT_DIR}/" + pkg_file])
+        deploy_cmd.extend(pkg_files_params)
+
+        deploy_cmd.extend(self.options.conda_create_params)
 
         return " ".join(deploy_cmd)
 

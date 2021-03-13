@@ -57,13 +57,24 @@ class CondaPlugin(PluginV2):
             "properties": {
                 "conda-packages": {
                     "type": "array",
-                    "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string"},
                     "default": [],
                 },
                 "conda-python-version": {"type": "string", "default": ""},
                 "conda-miniconda-version": {"type": "string", "default": "latest"},
+                "conda-create-type": {"type": "string", "default": "default"},
+                "conda-package-files": {
+                    "type": "array",
+                    "uniqueItems": True,
+                    "items": {"type": "string"},
+                    "default": [],
+                },
+                "conda-create-params": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                },
             },
         }
 
@@ -74,21 +85,25 @@ class CondaPlugin(PluginV2):
         return {"curl"}
 
     def get_build_environment(self) -> Dict[str, str]:
-        return {"PATH": "${HOME}/miniconda/bin:${PATH}"}
+        return {"PATH": "${SNAPCRAFT_PART_BUILD}/miniconda/bin:${PATH}"}
 
     def _get_download_miniconda_command(self, url: str) -> str:
         return dedent(
             f"""\
-        if ! [ -e "${{HOME}}/miniconda.sh" ]; then
-            curl --proto '=https' --tlsv1.2 -sSf {url} > ${{HOME}}/miniconda.sh
-            chmod 755 ${{HOME}}/miniconda.sh
-            export PATH="${{HOME}}/miniconda/bin:${{PATH}}"
+        if ! [ -e "${{SNAPCRAFT_PART_BUILD}}/miniconda.sh" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf {url} > ${{SNAPCRAFT_PART_BUILD}}/miniconda.sh
+            chmod 755 ${{SNAPCRAFT_PART_BUILD}}/miniconda.sh
+            export PATH="${{SNAPCRAFT_PART_BUILD}}/miniconda/bin:${{PATH}}"
         fi
         """
         )
 
     def _get_install_env_command(self) -> str:
-        cmd = ["${HOME}/miniconda.sh", "-bfp", "${HOME}/miniconda"]
+        cmd = [
+            "${SNAPCRAFT_PART_BUILD}/miniconda.sh",
+            "-bfp",
+            "${SNAPCRAFT_PART_BUILD}/miniconda",
+        ]
         return " ".join(cmd)
 
     def _get_deploy_command(self) -> str:
@@ -97,15 +112,24 @@ class CondaPlugin(PluginV2):
         deploy_cmd = [
             "CONDA_TARGET_PREFIX_OVERRIDE=" + conda_target_prefix,
             "conda",
+            "env",
             "create",
-            "--prefix",
+            "-p",
             "$SNAPCRAFT_PART_INSTALL",
-            "--yes",
+            "--force",
         ]
         if self.options.conda_python_version:
             deploy_cmd.append("python={}".format(self.options.conda_python_version))
 
         deploy_cmd.extend(self.options.conda_packages)
+
+        pkg_files = self.options.conda_package_files
+        pkg_files_params = []
+        for pkg_file in pkg_files:
+            pkg_files_params.extend(["-f", "${SNAPCRAFT_PROJECT_DIR}/" + pkg_file])
+        deploy_cmd.extend(pkg_files_params)
+
+        deploy_cmd.extend(self.options.conda_create_params)
 
         return " ".join(deploy_cmd)
 
